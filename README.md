@@ -15,7 +15,7 @@
 
 ## 
 Структура репозитория
-''
+###
 p2p-overlay-node/
 ├── README.md
 ├── ARCHITECTURE.md
@@ -66,7 +66,7 @@ p2p-overlay-node/
 └── configs/
     ├── node-01.env
     └── node-02.env
-''
+###
 
 ## Быстрый старт
 
