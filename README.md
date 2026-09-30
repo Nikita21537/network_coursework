@@ -13,6 +13,61 @@
 - Linux / macOS / Windows (проверено на Linux)
 - Внешние зависимости отсутствуют
 
+## 
+Структура репозитория
+text
+p2p-overlay-node/
+├── README.md
+├── ARCHITECTURE.md
+├── PROTOCOL.md
+├── LICENSE
+├── .gitignore
+├── pyproject.toml
+├── requirements.txt
+├── src/
+│   └── p2pnode/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── config.py
+│       ├── logging_setup.py
+│       ├── transport/
+│       │   ├── __init__.py
+│       │   ├── connection.py
+│       │   ├── server.py
+│       │   └── framing.py
+│       ├── protocol/
+│       │   ├── __init__.py
+│       │   ├── constants.py
+│       │   ├── messages.py
+│       │   └── codec.py
+│       ├── identity/
+│       │   ├── __init__.py
+│       │   └── node_id.py
+│       ├── rpc/
+│       │   ├── __init__.py
+│       │   ├── dispatcher.py
+│       │   └── handlers.py
+│       ├── routing/
+│       │   ├── __init__.py
+│       │   └── contact.py
+│       └── node/
+│           ├── __init__.py
+│           └── node.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_framing.py
+│   ├── test_codec.py
+│   ├── test_dispatcher.py
+│   └── test_negative.py
+├── scripts/
+│   ├── run_two_nodes_demo.py
+│   ├── demo_frames.py
+│   └── demo_negative.py
+└── configs/
+    ├── node-01.env
+    └── node-02.env
+    
+
 ## Быстрый старт
 
 ```
