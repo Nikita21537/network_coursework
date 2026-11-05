@@ -258,3 +258,68 @@ summary.json — сводка по обеим схемам.
 
 python -m unittest discover -s tests -v
 Покрытие этапа 2 — 48 тестов из общих 80:
+
+Структура модулей этапа 2
+```
+src/p2pnode/
+├── identity/
+│   ├── __init__.py
+│   └── node_id.py          # Ed25519, Identity, compute_node_id
+├── routing/
+│   ├── __init__.py
+│   ├── contact.py          # xor_distance, sort_by_distance
+│   ├── kbucket.py          # KBucket, AddResult
+│   ├── table.py            # RoutingTable, RoutingAddResult
+│   └── lookup.py           # LookupResult, lookup_node
+├── node/
+│   ├── __init__.py
+│   ├── node.py             # ping_raw, find_node, join
+│   └── bootstrap.py        # BootstrapResult, parse_peer, join_network
+├── protocol/
+│   ├── messages.py         # Contact с identity_public_key
+│   └── codec.py            # сериализация ключа и проверка node_id
+└── rpc/
+    └── handlers.py         # PingHandler, FindNodeHandler
+```
+3# Ключевые технические решения
+Идентичность
+Приватный ключ хранится только в NODE_STATE_DIR/identity.priv.
+
+При загрузке identity.pub сверяется с identity.priv — рассинхронизация
+вызывает ValueError.
+
+При получении Contact из сети проверяется SHA-256(canonical_encode(pk)) == node_id.
+
+Каноническая форма — b"ed25519:" + pk, зафиксирована константой.
+
+RoutingTable и k-bucket
+256 bucket'ов фиксированного размера — проще и детерминированнее
+динамического разбиения.
+
+Внутри bucket — LRU ([0] самый старый).
+
+Живой LRU не вытесняется без PING.
+
+Собственный NodeID не хранится в таблице.
+
+# Итеративный lookup
+ALPHA = 3 — требование ТЗ.
+
+ThreadPoolExecutor — параллельные запросы.
+
+# Условие остановки:
+
+все K ближайших опрошены; или
+некого больше спросить.
+Тайм-ауты фиксируются в LookupResult.timeouts, повторно не опрашиваются.
+
+success = target_node_id in closest_contacts.
+
+# Bootstrap
+ping_raw(host, port) — PING по адресу без Contact получателя.
+
+После join: routing.add_or_update + self-lookup.
+
+Ошибка bootstrap не останавливает узел.
+
+После присоединения bootstrap не требуется для дальнейших lookup
