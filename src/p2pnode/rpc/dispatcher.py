@@ -33,7 +33,7 @@ class Dispatcher:
 
     def dispatch(self, frame: Frame) -> object | None:
         if frame.type in (MSG_PONG, MSG_FIND_NODE_RESPONSE, MSG_ERROR):
-            # Ответы обрабатываются вызывающей стороной RPC, не диспетчером.
+
             return None
         handler = self._handlers.get(frame.type)
         if handler is None:

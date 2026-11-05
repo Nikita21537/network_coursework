@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: p2p-overlay-node
+Version: 0.2.0
+Summary: Защищённая оверлейная P2P-сеть: этап 2 — идентичность и DHT
+Requires-Python: >=3.11
+License-File: LICENSE
+Requires-Dist: cryptography>=42
+Dynamic: license-file

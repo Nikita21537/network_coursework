@@ -8,8 +8,16 @@ import time
 
 from ..config import Config
 from ..identity.node_id import Identity
-from ..protocol.constants import ALLOWED_TYPES, MSG_PING
-from ..protocol.messages import Contact, ErrorMessage, Ping
+from ..protocol.constants import ALLOWED_TYPES
+from ..protocol.messages import (
+    Contact,
+    ErrorMessage,
+    FindNodeRequest,
+    FindNodeResponse,
+    Ping,
+    Pong,
+)
+from ..routing.table import RoutingTable
 from ..rpc.dispatcher import Dispatcher, default_dispatcher
 from ..transport.connection import Connection
 from ..transport.framing import Frame, FrameDecoder, ProtocolError
@@ -22,10 +30,26 @@ class RpcError(Exception):
     pass
 
 
+_PROTOCOL_VIOLATIONS = frozenset(
+    {
+        "TRUNCATED_FRAME",
+        "BAD_VERSION",
+        "BAD_TYPE",
+        "BAD_LENGTH",
+        "BAD_PAYLOAD",
+        "BAD_FLAGS",
+    }
+)
+
+
 class Node:
     def __init__(self, config: Config) -> None:
         self.config = config
         self.identity = Identity.load_or_create(config.node_state_dir)
+        self.routing = RoutingTable(
+            local_node_id=self.identity.node_id,
+            k_bucket_size=config.k_bucket_size,
+        )
         self.dispatcher: Dispatcher = default_dispatcher(self)
         self.server = TCPServer(
             host=config.listen_host,
@@ -38,9 +62,7 @@ class Node:
         )
         self._serving = threading.Event()
 
-    # ------------------------------------------------------------------
-    # Публичные методы
-    # ------------------------------------------------------------------
+
     def start(self) -> None:
         self.server.start()
         log.info(
@@ -64,29 +86,43 @@ class Node:
             host = "127.0.0.1"
         return Contact(
             node_id=self.identity.node_id,
+            identity_algorithm=self.identity.algorithm,
+            identity_public_key=self.identity.public_key,
             host=host,
             port=self.config.listen_port,
         )
 
-    # ------------------------------------------------------------------
-    # Входящие соединения
-    # ------------------------------------------------------------------
+
     def _on_connection(self, conn: Connection) -> None:
         try:
             for frame in conn.recv_frames():
                 self._handle_frame(conn, frame)
         except ProtocolError as exc:
+            self._log_protocol_error(conn, exc)
+            self._try_send_error(
+                conn, frame=None, code=exc.code, message=exc.message
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("connection id=%d failed", conn.connection_id)
+        finally:
+            log.info("connection id=%d closed", conn.connection_id)
+
+    @staticmethod
+    def _log_protocol_error(conn: Connection, exc: ProtocolError) -> None:
+        if exc.code in _PROTOCOL_VIOLATIONS:
+            log.error(
+                "connection id=%d protocol violation: %s (%s)",
+                conn.connection_id,
+                exc.code,
+                exc.message,
+            )
+        else:
             log.warning(
                 "connection id=%d protocol error: %s (%s)",
                 conn.connection_id,
                 exc.code,
                 exc.message,
             )
-            self._try_send_error(conn, frame=None, code=exc.code, message=exc.message)
-        except Exception:  # noqa: BLE001
-            log.exception("connection id=%d failed", conn.connection_id)
-        finally:
-            log.info("connection id=%d closed", conn.connection_id)
 
     def _handle_frame(self, conn: Connection, frame: Frame) -> None:
         log.info(
@@ -149,9 +185,7 @@ class Node:
         except Exception:  # noqa: BLE001
             log.debug("could not send ERROR frame", exc_info=True)
 
-    # ------------------------------------------------------------------
-    # Исходящие RPC
-    # ------------------------------------------------------------------
+
     def send_request(
         self,
         contact: Contact,
@@ -219,20 +253,169 @@ class Node:
 
     @staticmethod
     def _message_type(message: object) -> int:
-        from ..protocol.messages import (
-            FindNodeRequest,
-            Ping,
-        )
-
         if isinstance(message, Ping):
             return 0x01
         if isinstance(message, FindNodeRequest):
             return 0x03
         raise ValueError(f"unsupported request message: {type(message).__name__}")
 
-    def ping(self, contact: Contact) -> object:
+    # ------------------------------------------------------------------
+    # PING
+    # ------------------------------------------------------------------
+    def _send_ping_only(self, contact: Contact) -> bool:
+        try:
+            msg = Ping(
+                sender=self.local_contact(),
+                timestamp_ms=int(time.time() * 1000),
+            )
+            self.send_request(
+                contact, msg, timeout_ms=self.config.ping_timeout_ms
+            )
+            return True
+        except RpcError:
+            return False
+
+    def _ping_lru(self, contact: Contact) -> bool:
+        return self._send_ping_only(contact)
+
+    def ping(self, contact: Contact) -> Pong:
         msg = Ping(
             sender=self.local_contact(),
             timestamp_ms=int(time.time() * 1000),
         )
-        return self.send_request(contact, msg, timeout_ms=self.config.ping_timeout_ms)
+        response = self.send_request(
+            contact, msg, timeout_ms=self.config.ping_timeout_ms
+        )
+        if not isinstance(response, Pong):
+            raise RpcError(f"expected Pong, got {type(response).__name__}")
+        self.routing.add_or_update(
+            response.responder, ping_lru=self._ping_lru
+        )
+        return response
+
+    def ping_raw(
+        self, host: str, port: int, timeout_ms: int | None = None
+    ) -> Pong:
+
+        timeout_ms = timeout_ms or self.config.ping_timeout_ms
+        request_id = secrets.token_bytes(16)
+        msg = Ping(
+            sender=self.local_contact(),
+            timestamp_ms=int(time.time() * 1000),
+        )
+        from ..protocol.codec import decode_payload, encode_payload
+
+        payload = encode_payload(msg)
+        frame = Frame(
+            version=self.config.protocol_version,
+            type=0x01,  # MSG_PING
+            flags=0,
+            request_id=request_id,
+            payload=payload,
+        )
+
+        try:
+            sock = socket.create_connection(
+                (host, port),
+                timeout=self.config.connect_timeout_ms / 1000.0,
+            )
+        except OSError as exc:
+            raise RpcError(f"bootstrap connect failed: {exc}") from exc
+
+        sock.settimeout(timeout_ms / 1000.0)
+        conn = Connection(
+            sock=sock,
+            peer=(host, port),
+            decoder=FrameDecoder(
+                protocol_version=self.config.protocol_version,
+                max_frame_payload=self.config.max_frame_payload,
+                allowed_types=set(ALLOWED_TYPES),
+            ),
+            connection_id=0,
+        )
+        try:
+            conn.send_frame(frame)
+            log.info(
+                "sent raw PING to %s:%d request_id=%s",
+                host,
+                port,
+                request_id.hex()[:8],
+            )
+            for resp in conn.recv_frames():
+                if resp.request_id != request_id:
+                    log.warning(
+                        "ignoring response with unexpected request_id=%s",
+                        resp.request_id.hex()[:8],
+                    )
+                    continue
+                response = decode_payload(resp.type, resp.payload)
+                if not isinstance(response, Pong):
+                    raise RpcError(
+                        f"expected Pong, got {type(response).__name__}"
+                    )
+                log.info(
+                    "recv raw PONG from %s:%d node=%s",
+                    host,
+                    port,
+                    response.responder.node_id.hex()[:8],
+                )
+                return response
+            raise RpcError("connection closed before PONG")
+        except ProtocolError as exc:
+            raise RpcError(f"protocol error: {exc.code} {exc.message}") from exc
+        finally:
+            conn.close()
+
+
+    def find_node(
+        self, contact: Contact, target_node_id: bytes
+    ) -> FindNodeResponse:
+        if len(target_node_id) != 32:
+            raise ValueError("target_node_id must be 32 bytes")
+
+        msg = FindNodeRequest(
+            sender=self.local_contact(),
+            target_node_id=target_node_id,
+        )
+        response = self.send_request(
+            contact, msg, timeout_ms=self.config.read_timeout_ms
+        )
+        if not isinstance(response, FindNodeResponse):
+            raise RpcError(
+                f"expected FindNodeResponse, got {type(response).__name__}"
+            )
+        if response.target_node_id != target_node_id:
+            raise RpcError(
+                "FIND_NODE response target_node_id mismatch: "
+                f"{response.target_node_id.hex()[:8]} != "
+                f"{target_node_id.hex()[:8]}"
+            )
+
+        self.routing.add_or_update(
+            response.responder, ping_lru=self._ping_lru
+        )
+
+        seen = {self.identity.node_id, response.responder.node_id}
+        added = 0
+        for c in response.contacts:
+            if c.node_id in seen:
+                continue
+            seen.add(c.node_id)
+            self.routing.add_or_update(c, ping_lru=self._ping_lru)
+            added += 1
+
+        log.info(
+            "FIND_NODE done: target=%s responder=%s contacts=%d added=%d",
+            target_node_id.hex()[:8],
+            response.responder.node_id.hex()[:8],
+            len(response.contacts),
+            added,
+        )
+        return response
+
+
+    def join(self, bootstrap_peers: list[str] | tuple[str, ...]):
+
+        from .bootstrap import join_network
+
+        return join_network(self, bootstrap_peers)

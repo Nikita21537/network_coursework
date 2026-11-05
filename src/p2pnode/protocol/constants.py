@@ -22,6 +22,8 @@ ERROR_CODES = frozenset(
         "BAD_LENGTH",
         "BAD_PAYLOAD",
         "BAD_TYPE",
+        "BAD_FLAGS",
+        "TRUNCATED_FRAME",
         "TIMEOUT",
         "INTERNAL",
         "CLOSED",

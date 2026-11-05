@@ -38,6 +38,10 @@ def main() -> int:
         "завышенная длина",
         struct.pack(">BBH16sI", PROTOCOL_VERSION, 0x01, 0, os.urandom(16), 65537),
     )
+    check(
+        "невалидные флаги",
+        struct.pack(">BBH16sI", PROTOCOL_VERSION, 0x01, 1, os.urandom(16), 0),
+    )
     print("Все негативные тесты пройдены.")
     return 0
 

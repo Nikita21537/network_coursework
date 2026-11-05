@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import struct
@@ -10,7 +8,6 @@ _HEADER_STRUCT = struct.Struct(">BBH16sI")
 
 
 class ProtocolError(Exception):
-
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -43,7 +40,6 @@ class Frame:
 
 class FrameDecoder:
 
-
     def __init__(
         self,
         protocol_version: int,
@@ -60,7 +56,6 @@ class FrameDecoder:
             self._buffer.extend(data)
 
     def next_frame(self) -> Frame:
-
         if len(self._buffer) < HEADER_SIZE:
             raise NeedMoreData()
 
@@ -77,6 +72,12 @@ class FrameDecoder:
             raise ProtocolError(
                 "BAD_LENGTH",
                 f"payload_length {payload_length} exceeds {self._max_payload}",
+            )
+        # NEW: flags must be 0 on stages 1–2.
+        if flags != 0:
+            raise ProtocolError(
+                "BAD_FLAGS",
+                f"flags must be 0 on stage 1, got {flags}",
             )
 
         total = HEADER_SIZE + payload_length

@@ -48,16 +48,57 @@ def _check_string(value: str, name: str) -> str:
     return value
 
 
+def _decode_hex(value: str, name: str, expected_len: int | None = None) -> bytes:
+    if len(value) > MAX_STRING_LEN:
+        raise PayloadError(f"field {name} too long")
+    try:
+        raw = bytes.fromhex(value)
+    except ValueError as exc:
+        raise PayloadError(f"field {name} must be hex") from exc
+    if expected_len is not None and len(raw) != expected_len:
+        raise PayloadError(
+            f"field {name} must be {expected_len} bytes, got {len(raw)}"
+        )
+    return raw
+
+
 def _decode_contact(data: Any) -> Contact:
     d = _expect_dict(data)
-    node_id_hex = _check_string(_get(d, "node_id", str), "node_id")
-    try:
-        node_id = bytes.fromhex(node_id_hex)
-    except ValueError as exc:
-        raise PayloadError("node_id must be hex") from exc
+    node_id = _decode_hex(
+        _check_string(_get(d, "node_id", str), "node_id"), "node_id", 32
+    )
+    identity_algorithm = _check_string(
+        _get(d, "identity_algorithm", str), "identity_algorithm"
+    )
+    identity_public_key = _decode_hex(
+        _check_string(
+            _get(d, "identity_public_key", str), "identity_public_key"
+        ),
+        "identity_public_key",
+        32,
+    )
     host = _check_string(_get(d, "host", str), "host")
     port = _get(d, "port", int)
-    return Contact(node_id=node_id, host=host, port=port)
+    try:
+        return Contact(
+            node_id=node_id,
+            identity_algorithm=identity_algorithm,
+            identity_public_key=identity_public_key,
+            host=host,
+            port=port,
+        )
+    except ValueError as exc:
+        raise PayloadError(str(exc)) from exc
+
+
+def _encode_contact(contact: Contact) -> dict[str, Any]:
+    return {
+        "node_id": contact.node_id.hex(),
+        "identity_algorithm": contact.identity_algorithm,
+        "identity_public_key": contact.identity_public_key.hex(),
+        "host": contact.host,
+        "port": contact.port,
+    }
 
 
 def _decode_contacts(data: Any) -> tuple[Contact, ...]:
@@ -98,14 +139,6 @@ def encode_payload(message: object) -> bytes:
     return json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
-def _encode_contact(contact: Contact) -> dict[str, Any]:
-    return {
-        "node_id": contact.node_id.hex(),
-        "host": contact.host,
-        "port": contact.port,
-    }
-
-
 def decode_payload(msg_type: int, payload: bytes) -> object:
     if not payload:
         raise PayloadError("empty payload")
@@ -132,20 +165,20 @@ def decode_payload(msg_type: int, payload: bytes) -> object:
 
     if msg_type == MSG_FIND_NODE_REQUEST:
         sender = _decode_contact(_get(d, "sender", dict))
-        target_hex = _check_string(_get(d, "target_node_id", str), "target_node_id")
-        try:
-            target = bytes.fromhex(target_hex)
-        except ValueError as exc:
-            raise PayloadError("target_node_id must be hex") from exc
+        target = _decode_hex(
+            _check_string(_get(d, "target_node_id", str), "target_node_id"),
+            "target_node_id",
+            32,
+        )
         return FindNodeRequest(sender=sender, target_node_id=target)
 
     if msg_type == MSG_FIND_NODE_RESPONSE:
         responder = _decode_contact(_get(d, "responder", dict))
-        target_hex = _check_string(_get(d, "target_node_id", str), "target_node_id")
-        try:
-            target = bytes.fromhex(target_hex)
-        except ValueError as exc:
-            raise PayloadError("target_node_id must be hex") from exc
+        target = _decode_hex(
+            _check_string(_get(d, "target_node_id", str), "target_node_id"),
+            "target_node_id",
+            32,
+        )
         contacts = _decode_contacts(_get(d, "contacts", list))
         return FindNodeResponse(
             responder=responder, target_node_id=target, contacts=contacts
