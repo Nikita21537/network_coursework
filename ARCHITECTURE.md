@@ -434,7 +434,7 @@ __main__.py:
         except Exception:
             log.exception("bootstrap failed")
 ```
-# 9. Изменения в TCPServer/Connection (этап 1, но актуально)
+# 9. Изменения в TCPServer/Connection 
 Активные соединения хранятся в dict[int, Connection] — Connection
 не хэшируется.
 
