@@ -115,7 +115,8 @@ MIT. См. `LICENSE`.
 
 
 pip install -e .
-Что добавляет этап 2
+
+## Что добавляет этап 2
 Ed25519-идентичность.
 При первом запуске — генерация Ed25519-пары.
 
@@ -178,7 +179,7 @@ BOOTSTRAP_PEERS	host:port,host:port,...	Адреса для join
 
 python -m p2pnode --config configs/node-02.env
 
-где в configs/node-02.env:
+# где в configs/node-02.env:
 
 env
 NODE_STATE_DIR=./state/node-02
@@ -234,7 +235,7 @@ python scripts/run_stage2_demo.py
 
 Артефакты в state/stage2/:
 
-###
+```
 state/stage2/
 ├── summary.json
 ├── star/
@@ -243,7 +244,7 @@ state/stage2/
 └── ring/
     ├── routing_ring-n0.json ... routing_ring-n11.json
     └── lookups_ring.csv
-###
+```
 routing_<scheme>_n<i>.json — snapshot таблицы маршрутизации узла
 (bucket'ы с контактами).
 
@@ -258,8 +259,8 @@ python -m unittest discover -s tests -v
 # Результат
 80 unit/integration тестов, все OK.
 
-Структура модулей этапа 2
-text
+# Структура модулей этапа 2
+```
 src/p2pnode/
 ├── identity/
 │   ├── __init__.py
@@ -279,3 +280,4 @@ src/p2pnode/
 │   └── codec.py            # сериализация ключа и проверка node_id
 └── rpc/
     └── handlers.py         # PingHandler, FindNodeHandler
+```
