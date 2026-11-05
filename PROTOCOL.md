@@ -307,7 +307,7 @@ contacts содержит ≤ K_BUCKET_SIZE записей.
 
 Все контакты валидируются при декодировании (Contact.__post_init__).
 
-5.4. Валидация на инициаторе
+# 5.4. Валидация на инициаторе
 Node.find_node(contact, target_node_id):
 
 проверяет isinstance(response, FindNodeResponse);
@@ -320,15 +320,15 @@ Node.find_node(contact, target_node_id):
 
 остальные контакты добавляет в routing через add_or_update.
 
-Тест: T2.11.
 
-6. Итеративный lookup
-6.1. Параметры
+
+## 6. Итеративный lookup
+# 6.1. Параметры
 ALPHA = 3 — параллелизм одной итерации.
 
 K = K_BUCKET_SIZE — сколько ближайших возвращать.
 
-6.2. Алгоритм
+# 6.2. Алгоритм
 Старт. shortlist = до K ближайших к target из routing.
 asked = пустое множество. timeouts = пустой список.
 
@@ -358,7 +358,7 @@ rpc_count += 1;
 Финал. closest_contacts = shortlist[:K], отсортированные по XOR.
 success = (target_node_id in closest_contacts).
 
-6.3. LookupResult
+# 6.3. LookupResult
 
 LookupResult {
     lookup_id:          str,             # 8 hex-символов
@@ -370,7 +370,7 @@ LookupResult {
     timeouts:           tuple[bytes, ...],  # node_id
     duration_ms:        int,
 }
-6.4. Запреты (по ТЗ, раздел 21.3)
+# 6.4. Запреты (по ТЗ, раздел 21.3)
 Последовательный опрос всех узлов при ALPHA = 3.
 
 Прямой запрос к целевому адресу, полученному от оркестратора.
@@ -382,15 +382,15 @@ LookupResult {
 
 Тест: T2.13 (многопереходный lookup).
 
-7. Bootstrap
-7.1. Общее
+## 7. Bootstrap
+## 7.1. Общее
 BOOTSTRAP_PEERS — список host:port через запятую.
 
 Первый seed-узел запускается с пустым BOOTSTRAP_PEERS.
 
 Все остальные узлы указывают хотя бы один peer.
 
-7.2. Порядок присоединения (Node.join)
+# 7.2. Порядок присоединения (Node.join)
 Для каждого host:port в BOOTSTRAP_PEERS:
 
 ping_raw(host, port) — низкоуровневый PING без Contact получателя;
@@ -406,15 +406,15 @@ self-lookup: lookup_node(node, self_node_id);
 
 BootstrapResult(success=True, bootstrap_contact, self_lookup_result, attempts).
 
-7.3. BootstrapResult
-text
+# 7.3. BootstrapResult
+
 BootstrapResult {
     success:             bool,
     bootstrap_contact:   Contact | None,
     self_lookup_result:  LookupResult | None,
     attempts:            int,
 }
-7.4. Схемы bootstrap
+# 7.4. Схемы bootstrap
 star — все новые узлы через один seed.
 
 ring — каждый новый узел через предшественника.
@@ -422,12 +422,12 @@ ring — каждый новый узел через предшественни�
 На этапе 2 обе схемы работают; для продвинутого уровня добавляются tree
 и multi-seed — это этап 3+.
 
-7.5. Требование независимости от bootstrap (T2.14)
+# 7.5. Требование независимости от bootstrap (T2.14)
 После успешного join узел не требует доступности bootstrap
 для последующих lookup. Bootstrap-контакт становится обычным контактом
 в routing и может быть вытеснен по LRU.
 
-8. Новые коды ошибок
+# 8. Новые коды ошибок
 По сравнению с этапом 1 добавлены:
 
 Код	Причина
@@ -436,7 +436,7 @@ BAD_FLAGS	flags != 0 (исправление этапа 1)
 TRUNCATED_FRAME и BAD_FLAGS фиксируются в ERROR и в логе на уровне
 ERROR (protocol violation).
 
-9. Валидация Contact при приёме
+# 9. Валидация Contact при приёме
 Проверка полей — Contact.__post_init__.
 
 При декодировании в codec._decode_contact:
@@ -452,7 +452,7 @@ Dispatcher возвращает ERROR с кодом BAD_PAYLOAD.
 Принимающий узел не доверяет last_seen_ms/last_verified_ms
 от удалённой стороны (в сеть они не передаются).
 
-10. Тайм-ауты и лимиты
+# 10. Тайм-ауты и лимиты
 Параметр	Значение
 MAX_FRAME_PAYLOAD	65536
 CONNECT_TIMEOUT_MS	3000
