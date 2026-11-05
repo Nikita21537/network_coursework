@@ -259,7 +259,7 @@ summary.json — сводка по обеим схемам.
 python -m unittest discover -s tests -v
 Покрытие этапа 2 — 48 тестов из общих 80:
 
-Структура модулей этапа 2
+# Структура модулей этапа 2
 ```
 src/p2pnode/
 ├── identity/
