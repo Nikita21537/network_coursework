@@ -114,8 +114,7 @@ MIT. См. `LICENSE`.
 ## Установка
 
 
-pip install -e .
-
+# pip install -e .
 ## Что добавляет этап 2
 Ed25519-идентичность.
 При первом запуске — генерация Ed25519-пары.
@@ -130,22 +129,22 @@ Contact с публичным ключом.
 Проверка compute_node_id(pubkey) == node_id — подмена ключа или NodeID
 отклоняется (ValueError при создании, PayloadError при декодировании).
 
-k-bucket с LRU.
+# k-bucket с LRU.
 При полном bucket — PING к LRU:
 
 LRU жив → перемещается в конец, новый контакт не добавляется;
 
 LRU мёртв → удаляется, новый добавляется в конец.
 
-RoutingTable.
+# RoutingTable.
 256 фиксированных bucket по индексу старшего установленного бита
 local_node_id XOR node_id.
 
-PING/PONG обслуживают bucket.
+# PING/PONG обслуживают bucket.
 При получении PING и при успешном PONG контакт добавляется/обновляется
 в routing с callback ping_lru.
 
-FIND_NODE.
+# FIND_NODE.
 Возвращает до K_BUCKET_SIZE ближайших к target_node_id из routing,
 отсортированных по XOR, без дубликатов, без собственного NodeID.
 
@@ -157,7 +156,7 @@ ALPHA = 3, параллельные запросы через ThreadPoolExecutor
 
 некого больше спросить.
 
-Bootstrap.
+# Bootstrap.
 Node.join(bootstrap_peers):
 
 ping_raw(host, port) до первого успеха;
@@ -168,19 +167,18 @@ self-lookup (lookup_node(self_node_id)).
 
 Конфигурация
 Параметры, которые появились/уточнились на этапе 2:
-
+```
 Параметр	Значение	Назначение
 K_BUCKET_SIZE	3 (basic) / 4 (advanced)	Ёмкость каждого bucket
 ALPHA	3	Параллелизм lookup
 BOOTSTRAP_PEERS	host:port,host:port,...	Адреса для join
-Остальные параметры — те же, что на этапе 1.
+```
 
 # Запуск узла с bootstrap
 
 python -m p2pnode --config configs/node-02.env
-
-# где в configs/node-02.env:
-
+где в configs/node-02.env:
+```
 env
 NODE_STATE_DIR=./state/node-02
 LISTEN_HOST=127.0.0.1
@@ -188,17 +186,19 @@ LISTEN_PORT=9102
 BOOTSTRAP_PEERS=127.0.0.1:9101
 K_BUCKET_SIZE=3
 ALPHA=3
+```
 В логе после старта:
 
-
+```
 bootstrap: PING 127.0.0.1:9101
 bootstrap: joined via 127.0.0.1:9101 node=xxxxxxxx
 bootstrap result: success=True attempts=1 bootstrap_node=xxxxxxxx routing_size=1
 bootstrap self-lookup: success=True contacts=N rpc=M iters=K duration_ms=X
 Если bootstrap-узел недоступен — узел продолжает работать как seed
 (ошибка логируется, но процесс не падает).
+```
+# Демонстрации
 
-Демонстрации
 scripts/run_bootstrap_demo.py — 5 subprocess-узлов
 Проверяет, что bootstrap идёт через реальный TCP:
 
@@ -206,13 +206,15 @@ star — все новые узлы через один seed;
 
 ring — каждый новый через предшественника.
 
-
+```
 rm -rf state/seed state/star-n* state/ring-n*
 python scripts/run_bootstrap_demo.py
 Ожидаемо: в логах не-seed узлов bootstrap result: success=True.
 
 scripts/run_stage2_demo.py — 12 in-process узлов, 10+ lookup
+```
 Полный сценарий раздела 25 ТЗ:
+
 
 12 узлов in-process (пилотный масштаб N = 12).
 
@@ -244,40 +246,15 @@ state/stage2/
 └── ring/
     ├── routing_ring-n0.json ... routing_ring-n11.json
     └── lookups_ring.csv
-```
 routing_<scheme>_n<i>.json — snapshot таблицы маршрутизации узла
 (bucket'ы с контактами).
-
+```
 lookups_<scheme>.csv — 10 контрольных lookup: инициатор, цель,
 число RPC, число итераций, длительность, флаг target_found.
 
 summary.json — сводка по обеим схемам.
 
-# Тесты этапа 2
+##  Тесты этапа 2
 
 python -m unittest discover -s tests -v
-# Результат
-80 unit/integration тестов, все OK.
-
-# Структура модулей этапа 2
-```
-src/p2pnode/
-├── identity/
-│   ├── __init__.py
-│   └── node_id.py          # Ed25519, Identity, compute_node_id
-├── routing/
-│   ├── __init__.py
-│   ├── contact.py          # xor_distance, sort_by_distance
-│   ├── kbucket.py          # KBucket, AddResult
-│   ├── table.py            # RoutingTable, RoutingAddResult
-│   └── lookup.py           # LookupResult, lookup_node
-├── node/
-│   ├── __init__.py
-│   ├── node.py             # ping_raw, find_node, join
-│   └── bootstrap.py        # BootstrapResult, parse_peer, join_network
-├── protocol/
-│   ├── messages.py         # Contact с identity_public_key
-│   └── codec.py            # сериализация ключа и проверка node_id
-└── rpc/
-    └── handlers.py         # PingHandler, FindNodeHandler
-```
+Покрытие этапа 2 — 48 тестов из общих 80:
