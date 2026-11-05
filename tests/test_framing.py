@@ -105,16 +105,17 @@ class FramingTests(unittest.TestCase):
             decoder.next_frame()
         self.assertEqual(ctx.exception.code, "BAD_LENGTH")
 
-    def test_t17_unknown_version(self) -> None:
+    def test_t17b_bad_flags(self) -> None:
         import struct
 
-        header = struct.pack(">BBH16sI", 99, 0x01, 0, os.urandom(16), 0)
+        header = struct.pack(
+            ">BBH16sI", PROTOCOL_VERSION, 0x01, 1, os.urandom(16), 0
+        )
         decoder = make_decoder()
         decoder.feed(header)
         with self.assertRaises(ProtocolError) as ctx:
             decoder.next_frame()
-        self.assertEqual(ctx.exception.code, "BAD_VERSION")
-
+        self.assertEqual(ctx.exception.code, "BAD_FLAGS")
     def test_t18_unknown_type(self) -> None:
         import struct
 

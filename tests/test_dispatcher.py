@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import secrets
+import tempfile
 import unittest
+from pathlib import Path
 
+from p2pnode.identity import Identity
 from p2pnode.protocol.codec import encode_payload
 from p2pnode.protocol.constants import (
     MSG_FIND_NODE_REQUEST,
@@ -22,22 +26,36 @@ from p2pnode.transport.framing import Frame
 
 
 def c(byte: int = 0) -> Contact:
-    return Contact(node_id=bytes([byte]) * 32, host="127.0.0.1", port=9101)
+    with tempfile.TemporaryDirectory() as d:
+        ident = Identity.load_or_create(Path(d))
+        return Contact(
+            node_id=ident.node_id,
+            identity_algorithm=ident.algorithm,
+            identity_public_key=ident.public_key,
+            host="127.0.0.1",
+            port=9101,
+        )
 
 
 class DispatcherTests(unittest.TestCase):
     def _dispatcher(self) -> Dispatcher:
         d = Dispatcher()
-        d.register(MSG_PING, MSG_PONG, lambda m: Pong(
-            responder=c(9),
-            ping_timestamp_ms=m.timestamp_ms,
-            responder_timestamp_ms=0,
-        ))
+        d.register(
+            MSG_PING,
+            MSG_PONG,
+            lambda m: Pong(
+                responder=c(9),
+                ping_timestamp_ms=m.timestamp_ms,
+                responder_timestamp_ms=0,
+            ),
+        )
         d.register(
             MSG_FIND_NODE_REQUEST,
             MSG_FIND_NODE_RESPONSE,
             lambda m: FindNodeResponse(
-                responder=c(9), target_node_id=m.target_node_id, contacts=()
+                responder=c(9),
+                target_node_id=m.target_node_id,
+                contacts=(),
             ),
         )
         return d
@@ -72,6 +90,21 @@ class DispatcherTests(unittest.TestCase):
         d = self._dispatcher()
         frame = Frame(1, MSG_PONG, 0, b"\x00" * 16, b"{}")
         self.assertIsNone(d.dispatch(frame))
+
+    def test_t15_100_frames_through_dispatcher(self) -> None:
+        d = self._dispatcher()
+        for i in range(100):
+            msg = Ping(sender=c(1), timestamp_ms=i)
+            frame = Frame(
+                version=1,
+                type=MSG_PING,
+                flags=0,
+                request_id=secrets.token_bytes(16),
+                payload=encode_payload(msg),
+            )
+            result = d.dispatch(frame)
+            self.assertIsInstance(result, Pong)
+            self.assertEqual(result.ping_timestamp_ms, i)
 
 
 if __name__ == "__main__":
